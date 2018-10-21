@@ -64,11 +64,13 @@ def extract_date(month, day, raw_time_str):
 
     # Sat 19:00 UTC+03 · 34 guests
     # Wed 7:00 PM UTC+03
-    single_date_pattern = '(\d{1,2}:\d{2}\s+(?:AM\s+|PM\s+)?)UTC(\+\d{2})'
+    # Sun 1:00 PM EDT · 936 guests
+    single_date_pattern = '(\d{1,2}:\d{2}\s+(?:AM\s+|PM\s+)?)(?:UTC(\+\d{2})|\S+)'
     single_date_match = re.search(single_date_pattern, raw_time_str)
     if single_date_match:
-        datetime_string = ' '.join([month, day, single_date_match.group(1),
-                                    single_date_match.group(2)])
+        time_data = single_date_match.group(1)
+        time_zone = single_date_match.group(2) or ''
+        datetime_string = ' '.join([month, day, time_data, time_zone])
         parsed_start_date = parse(datetime_string, default=current_day_start)
         return parsed_start_date, None
 
@@ -134,14 +136,23 @@ def process_recurring_event(recurring_element_container):
         parsed_date, _ = extract_date(month_first, day_first, raw_time_str_first)
         if not parsed_date:
             print("Failed to match time from '{}'".format(raw_time_str_first))
-            return
         next_dates_parsed.append(parsed_date)
+
+    if len(next_dates_parsed) == 0:
+        first_date = None
+        second_date = None
+    elif len(next_dates_parsed) == 1:
+        first_date = next_dates_parsed[0]
+        second_date = None
+    else:
+        first_date = next_dates_parsed[0]
+        second_date = next_dates_parsed[1]
 
     new_recurring_event = Event(
         name=recurring_element_container.find_element_by_css_selector('._2l3f._2pic').text,
         venue=recurring_element_container.find_element_by_css_selector('._2l3g._2pic').text,
-        first_date=next_dates_parsed[0],
-        second_date=next_dates_parsed[1],
+        first_date=first_date,
+        second_date=second_date,
     )
 
     session.add(new_recurring_event)
@@ -154,12 +165,39 @@ for fb_page in config.fb_pages:
     # TODO remove sleep if possible
     time.sleep(3)
 
+    # Get scroll height
+    last_height = driver.execute_script("return document.body.scrollHeight")
+    upcoming_events = driver.find_element_by_id("upcoming_events_card")
     past_events = driver.find_element_by_id("past_events_card")
-    driver.execute_script("return arguments[0].scrollIntoView();", past_events)
+
+    while True:
+        # Scroll to upcoming events
+        driver.execute_script("return arguments[0].scrollIntoView({block: 'start'});", upcoming_events)
+        time.sleep(0.2)
+        # Scroll up by 500 pixels
+        driver.execute_script("window.scrollBy(0, -500);")
+        # Wait to load page
+        time.sleep(4)
+        # Calculate new scroll height and compare with last scroll height
+        new_height = driver.execute_script("return document.body.scrollHeight")
+        if new_height == last_height:
+            break
+        last_height = new_height
+
+    while True:
+        # Scroll down to bottom
+        driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+        # Wait to load page
+        time.sleep(4)
+        # Calculate new scroll height and compare with last scroll height
+        new_height = driver.execute_script("return document.body.scrollHeight")
+        if new_height == last_height:
+            break
+        last_height = new_height
+
     time.sleep(5)
 
-    upcoming_elements_container = driver.find_element_by_id("upcoming_events_card") #identifies the upcoming events container
-    elements_containers = upcoming_elements_container.find_elements_by_class_name('_24er') #identifies event paragraph(event) in upcoming events container
+    elements_containers = upcoming_events.find_elements_by_class_name('_24er') #identifies event paragraph(event) in upcoming events container
     for element_container in elements_containers:
         process_event(element_container)
 
