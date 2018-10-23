@@ -115,7 +115,7 @@ def process_event(element_container):
 
     new_event = Event(
         name=element_container.find_element_by_class_name(' _50f7').text,
-        venue=driver.find_element_by_class_name('_64-f').text,
+        venue=driver.find_element_by_class_name('_30n-').text,
         start_date=parsed_start_date,
         end_date=parsed_end_date,
         link=element_container.find_element_by_class_name('_4dmk').find_element_by_tag_name('a').get_attribute("href")
